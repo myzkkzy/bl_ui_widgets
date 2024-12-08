@@ -1,23 +1,26 @@
 from . bl_ui_widget import *
 
+import gpu
+from gpu_extras.batch import batch_for_shader
 import blf
 
+
 class BL_UI_Slider(BL_UI_Widget):
-    
+
     def __init__(self, x, y, width, height):
         super().__init__(x, y, width, height)
-        self._text_color        = (1.0, 1.0, 1.0, 1.0)
-        self._color          = (0.5, 0.5, 0.7, 1.0)
-        self._hover_color    = (0.5, 0.5, 0.8, 1.0)
-        self._select_color   = (0.7, 0.7, 0.7, 1.0)
-        self._bg_color       = (0.8, 0.8, 0.8, 0.6)
+        self._text_color = (1.0, 1.0, 1.0, 1.0)
+        self._color = (0.5, 0.5, 0.7, 1.0)
+        self._hover_color = (0.5, 0.5, 0.8, 1.0)
+        self._select_color = (0.7, 0.7, 0.7, 1.0)
+        self._bg_color = (0.8, 0.8, 0.8, 0.6)
 
         self._min = 0
         self._max = 100
-        
+
         self.x_screen = x
         self.y_screen = y
-        
+
         self._text_size = 14
         self._decimals = 2
 
@@ -30,7 +33,6 @@ class BL_UI_Slider(BL_UI_Widget):
         self.__slider_width = 5
         self.__slider_height = 13
         self.__slider_offset_y = 3
-
 
     @property
     def text_color(self):
@@ -103,18 +105,20 @@ class BL_UI_Slider(BL_UI_Widget):
     @show_min_max.setter
     def show_min_max(self, value):
         self._show_min_max = value
-                
-    def draw(self):      
+
+    def draw(self):
         if not self.visible:
             return
 
         area_height = self.get_area_height()
 
+        # GPUの状態設定
+        gpu.state.blend_set('ALPHA')
         self.shader.bind()
-        
+
         color = self._color
         text_color = self._text_color
-        
+
         # pressed
         if self.__state == 1:
             color = self._select_color
@@ -125,52 +129,49 @@ class BL_UI_Slider(BL_UI_Widget):
 
         # Draw background
         self.shader.uniform_float("color", self._bg_color)
-        bgl.glEnable(bgl.GL_BLEND)
         self.batch_bg.draw(self.shader)
 
-        # Draw slider   
+        # Draw slider
         self.shader.uniform_float("color", color)
-        
-        self.batch_slider.draw(self.shader) 
-        bgl.glDisable(bgl.GL_BLEND)      
-        
+
+        self.batch_slider.draw(self.shader)
+
+        gpu.state.blend_set('NONE')
+
         # Draw value text
         sFormat = "{:0." + str(self._decimals) + "f}"
-        blf.size(0, self._text_size, 72)
-        
+        blf.size(0, self._text_size)
+
         sValue = sFormat.format(self.__slider_value)
         size = blf.dimensions(0, sValue)
-                      
-        blf.position(0, self.__slider_pos + 1 + self.x_screen - size[0] / 2.0, 
-                        area_height - self.y_screen + self.__slider_offset_y, 0)
-            
+
+        blf.position(0, self.__slider_pos + 1 + self.x_screen - size[0] / 2.0,
+                     area_height - self.y_screen + self.__slider_offset_y, 0)
+
         blf.draw(0, sValue)
 
         # Draw min and max
         if self._show_min_max:
             sMin = sFormat.format(self._min)
-            
             size = blf.dimensions(0, sMin)
-                        
-            blf.position(0, self.x_screen - size[0] / 2.0, 
-                            area_height - self.height - self.y_screen, 0)
+
+            blf.position(0, self.x_screen - size[0] / 2.0,
+                         area_height - self.height - self.y_screen, 0)
             blf.draw(0, sMin)
 
             sMax = sFormat.format(self._max)
-            
             size = blf.dimensions(0, sMax)
 
             r, g, b, a = self._text_color
             blf.color(0, r, g, b, a)
-                        
-            blf.position(0, self.x_screen + self.width - size[0] / 2.0, 
-                            area_height - self.height - self.y_screen, 0)
-            blf.draw(0, sMax)
 
+            blf.position(0, self.x_screen + self.width - size[0] / 2.0,
+                         area_height - self.height - self.y_screen, 0)
+            blf.draw(0, sMax)
 
     def update_slider(self):
         # Slider triangles
-        # 
+        #
         #        0
         #     1 /\ 2
         #      |  |
@@ -181,33 +182,33 @@ class BL_UI_Slider(BL_UI_Widget):
 
         h = self.__slider_height
         w = self.__slider_width
-        pos_y = area_height - self.y_screen - self.height / 2.0 + self.__slider_height / 2.0 + self.__slider_offset_y
+        pos_y = area_height - self.y_screen - self.height / 2.0 + \
+            self.__slider_height / 2.0 + self.__slider_offset_y
         pos_x = self.x_screen + self.__slider_pos
-        
-        indices = ((0, 1, 2), (1, 2, 3), (3, 2, 4))
-        
-        vertices = (
-                    (pos_x    , pos_y    ),
-                    (pos_x - w, pos_y - w),
-                    (pos_x + w, pos_y - w),
-                    (pos_x - w, pos_y - h),
-                    (pos_x + w, pos_y - h)
-                   )
-                    
-        self.shader = gpu.shader.from_builtin('2D_UNIFORM_COLOR')
-        self.batch_slider = batch_for_shader(self.shader, 'TRIS', 
-        {"pos" : vertices}, indices=indices)
-        
-    def update(self, x, y): 
 
+        indices = ((0, 1, 2), (1, 2, 3), (3, 2, 4))
+
+        vertices = (
+            (pos_x, pos_y),
+            (pos_x - w, pos_y - w),
+            (pos_x + w, pos_y - w),
+            (pos_x - w, pos_y - h),
+            (pos_x + w, pos_y - h)
+        )
+
+        self.shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+        self.batch_slider = batch_for_shader(self.shader, 'TRIS',
+                                             {"pos": vertices}, indices=indices)
+
+    def update(self, x, y):
         area_height = self.get_area_height()
-        
+
         # Min                      Max
         #  |---------V--------------|
-        
+
         self.x_screen = x
         self.y_screen = y
-        
+
         self.update_slider()
 
         # batch for background
@@ -216,31 +217,31 @@ class BL_UI_Slider(BL_UI_Widget):
 
         indices = ((0, 1, 2), (0, 2, 3))
 
-        # bottom left, top left, top right, bottom right
         vertices = (
-                    (pos_x, pos_y), 
-                    (pos_x, pos_y + 4), 
-                    (pos_x + self.width, pos_y + 4),
-                    (pos_x + self.width, pos_y)
+            (pos_x, pos_y),
+            (pos_x, pos_y + 4),
+            (pos_x + self.width, pos_y + 4),
+            (pos_x + self.width, pos_y)
         )
 
+        self.batch_bg = batch_for_shader(
+            self.shader, 'TRIS', {"pos": vertices}, indices=indices)
 
-        self.batch_bg = batch_for_shader(self.shader, 'TRIS', {"pos" : vertices}, indices=indices)
- 
     def set_value_change(self, value_change_func):
         self.value_change_func = value_change_func
-    
+
     def is_in_rect(self, x, y):
         area_height = self.get_area_height()
-        slider_y = area_height - self.y_screen - self.height / 2.0 + self.__slider_height / 2.0 + self.__slider_offset_y
+        slider_y = area_height - self.y_screen - self.height / \
+            2.0 + self.__slider_height / 2.0 + self.__slider_offset_y
 
         if (
-            (self.x_screen + self.__slider_pos - self.__slider_width <= x <= 
-            (self.x_screen + self.__slider_pos + self.__slider_width)) and 
+            (self.x_screen + self.__slider_pos - self.__slider_width <= x <=
+             (self.x_screen + self.__slider_pos + self.__slider_width)) and
             (slider_y >= y >= slider_y - self.__slider_height)
-            ):
+        ):
             return True
-           
+
         return False
 
     def __value_to_pos(self, value):
@@ -271,7 +272,6 @@ class BL_UI_Slider(BL_UI_Widget):
             if self.context is not None:
                 self.update_slider()
 
-
     def __set_slider_pos(self, x):
         if x <= self.x_screen:
             self.__slider_pos = 0
@@ -289,29 +289,29 @@ class BL_UI_Slider(BL_UI_Widget):
                 self.value_change_func(self, self.__slider_value)
             except:
                 pass
-                 
-    def mouse_down(self, x, y):    
-        if self.is_in_rect(x,y):
+
+    def mouse_down(self, x, y):
+        if self.is_in_rect(x, y):
             self.__state = 1
             self.__is_drag = True
-                
+
             return True
-        
+
         return False
-    
+
     def mouse_move(self, x, y):
-        if self.is_in_rect(x,y):
-            if(self.__state != 1):
-                
+        if self.is_in_rect(x, y):
+            if (self.__state != 1):
+
                 # hover state
                 self.__state = 2
         else:
             self.__state = 0
-        
+
         if self.__is_drag:
             self.__set_slider_pos(x)
             self.update(self.x_screen, self.y_screen)
- 
+
     def mouse_up(self, x, y):
         self.__state = 0
         self.__is_drag = False
